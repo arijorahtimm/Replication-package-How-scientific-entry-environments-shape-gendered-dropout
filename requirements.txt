@@ -1,0 +1,9 @@
+# Python >= 3.10
+duckdb>=1.0          # steps 2-8, 11 (QUALIFY, GROUP BY ALL, multi-argument hash)
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+lifelines>=0.27      # step 9
+matplotlib>=3.7      # steps 10, 11 (+ Pillow for TIFF export)
+pillow>=9
+# step 6: Wiki-Gendersort, https://github.com/nicolasberube/Wiki-Gendersort (install from source)
