@@ -3,54 +3,65 @@
 Timm, Ari Jorah & Wittek, Mark: *Beyond access: How entry environments shape gendered dropout from scientific careers*
 (working title), submitted to *Historical Social Research*, special issue "Computational Social Inequality Research in Practice".
 
-This folder contains the code that turns the PubMed Knowledge Graph (PKG 2.0) into the author-level survival data and estimates
-the Cox models reported in the article. Large data files are **not** included (see *Data*).
+This repository contains the code that turns the PubMed Knowledge Graph (PKG 2.0) into the author-level survival data and
+estimates the Cox models reported in the article. Data files are **not** included (see *Data*).
 
 ---
 
-## 1. Pipeline overview
+## 1. Folder layout
 
-| # | notebook | location in the project folder | runs on | input → output |
-|---|---|---|---|---|
-| 1 | `code/step1_select_topics.ipynb` | `step1_topics/select_topics.ipynb` | laptop | PKG `Final_Result.sorted.tsv` + `outside_topic_cites_new.csv` → `Final_Result.selected.csv` |
-| 2 | `code/step2_restrict_period.ipynb` | `step2_descriptives/pure_dataprep.ipynb` | laptop | `Final_Result.selected.csv` → `step2_descriptives/filtered_data.csv` (1950–2023, entry < 2019) |
-| 3 | `code/step3_recover_forenames_v2.ipynb` | `claude/recover_forenames_v2.ipynb` | laptop (DuckDB) | `step3_retrieve_names/authors_gender_nan_ini.tsv` + Enhanced Author Names → `claude/nan_ini_medline_names_v2.csv` (match on PMID + surname, ties by first initial, then position) |
-| 4 | `code/step4_infer_gender_v2.ipynb` | `claude/infer_gender_v2.ipynb` | laptop (`wiki_env`) | → `claude/nan_ini_medline_names_and_gender_v2.csv` (Wiki-Gendersort) |
-| 4b | `code/step4b_merge_recovered_gender_v2.ipynb` | `claude/merge_recovered_gender_v2.ipynb` | laptop (DuckDB) | `filtered_data.csv` + step 4 → `claude/filtered_data_recovered_v2.csv` (majority gender per AID) |
-| 5 | `code/step5_cox_dataprep_v3.ipynb` | `claude/cox_dataprep_v3.ipynb` | laptop (DuckDB) | → `claude/dataprep/cox_data_v3.csv`, diagnostics, sample flow |
-| 7 | `code/step7_cox_models_v3.ipynb` | `claude/cox_models_v3.ipynb` | server (lifelines) | `cox_data_v3.csv` → `results_v3/<spec>/*.csv` (copied back to `claude/results_v3/`) |
-| 8 | `code/step8_publication_graphs_v3.ipynb` | `claude/publication_graphs_v3.ipynb` | laptop | results → model figures and LaTeX tables in `claude/publication_figures/` |
-| 8b | `code/step8b_descriptive_figures_v3.ipynb` | `claude/descriptive_figures_v3.ipynb` | laptop | raw data + `cox_data_v3.csv` → descriptive figures in `claude/descriptives_v3/` |
+```
+code/            notebooks and scripts (steps 1–11, notebook outputs cleared)
+data/raw/        input data (PKG 2.0, Enhanced Author Names, OpenAlex topic mapping) – to be downloaded, see section 6
+data/derived/    intermediate files written by steps 1–8
+results/         model results of step 9 (one sub-folder per specification)
+figures/         figures and tables of steps 10 and 11
+```
 
-The notebooks in `code/` are the analysis notebooks with cleared outputs.
-Not part of the pipeline: `step6_linearregression/*` (exploratory OLS), the OpenAlex-API notebooks in `step3_retrieve_names/`
-(exploratory; they contained API keys and are therefore excluded).
+All paths are relative to the repository root; notebooks are run from `code/` (`BASE_DIR = os.path.abspath('..')`).
+Folders under `data/`, `results/` and `figures/` are created automatically.
 
-## 2. How to run
+## 2. Pipeline overview
 
-Paths are set in the first code cell of every notebook (`BASE_DIR` = project root `/Users/arijorah/Desktop/paper`; adapt).
+| # | file | input → output |
+|---|---|---|
+| 1 | `code/step01_build_author_paper_table.py` | PKG `raw/C02_Link_Papers_Authors.tsv.gz` + `raw/C07_Authors.tsv.gz` + `raw/cleaned_topics.csv` (PMID → OpenAlex topic) + `raw/AID_gender_korr.csv` (gender per AID) → `derived/Final_Result.sorted.tsv` (author × paper rows with topic and gender), `derived/Final_Result.C07_Authors.filtered.tsv` |
+| 2 | `code/step02_select_topics.ipynb` | `Final_Result.sorted.tsv` + `raw/outside_topic_cites_new.csv` → `derived/Final_Result.selected.csv` (topics with ≤ 20 % outside-PubMed citations) |
+| 3 | `code/step03_restrict_period.ipynb` | `Final_Result.selected.csv` → `derived/filtered_data.csv` (1950–2023, entry < 2019) |
+| 4 | `code/step04_select_unclassified_authors.py` | `Final_Result.selected.csv` + `raw/A02_AuthorList.tsv` → `derived/authors_gender_nan_ini.tsv` (authors with gender missing/`UNK`/`INI`, papers from 1950) |
+| 5 | `code/step05_recover_forenames.ipynb` | `authors_gender_nan_ini.tsv` + `raw/MEDLINE-enhanced-author-names-v2.tsv` → `derived/nan_ini_medline_names.csv` (match on PMID + surname, ties by first initial, then position) |
+| 6 | `code/step06_infer_gender.ipynb` | → `derived/nan_ini_medline_names_and_gender.csv` (Wiki-Gendersort) |
+| 7 | `code/step07_merge_recovered_gender.ipynb` | `filtered_data.csv` + step 6 → `derived/filtered_data_recovered.csv` (majority gender per AID) |
+| 8 | `code/step08_cox_dataprep.ipynb` | → `derived/cox_data.csv`, diagnostics, sample flow |
+| 9 | `code/step09_cox_models.ipynb` | `cox_data.csv` → `results/<spec>/*.csv` |
+| 10 | `code/step10_publication_graphs.ipynb` | results → model figures and LaTeX tables in `figures/models/` |
+| 11 | `code/step11_descriptive_figures.ipynb` | `filtered_data_recovered.csv` + `cox_data.csv` → descriptive figures in `figures/descriptives/` |
 
-1. Steps 1–2: run in order (paths point to `/Users/arijorah/Desktop/Masterarbeit/...` and must be adapted).
-2. Steps 3 → 4 → 4b: run in order.
-   Step 3 runs the PKG × MEDLINE join in `N_BATCHES = 20` PMID slices with `memory_limit = '4GB'`, `threads = 2`
-   (≈ 12 min on a laptop; on a larger machine raise the limits / lower `N_BATCHES` – the result is identical).
-   Step 4 needs Wiki-Gendersort (`WG_DIR`) and runs in its own environment (`wiki_env`).
-3. Step 5: needs `claude/filtered_data_recovered_v2.csv` (step 4b) and `step2_descriptives/filtered_data.csv` (for `gender_source`).
-   Runtime ≈ 5–10 min, ≈ 8 GB RAM (DuckDB spills to disk). Writes to `claude/dataprep/`.
-   The topic × year table is kept in `dataprep_v3.duckdb` (its CSV export is commented out).
-4. Step 7: copy `cox_data_v3.csv` (~2 GB) and the notebook to the server, set `DATA_PATH` and `OUT_DIR`, run all cells.
-   Specifications can be split over several sessions via `RUN_SPECS`; each writes its own folder `OUT_DIR/<spec>/`.
-   Copy the whole `results_v3` folder back to `claude/results_v3/`.
-5. Steps 8 and 8b: run all cells. All figures are 10.7 cm wide, black-and-white (grey shades, line styles, hatching)
-   and saved as PDF and TIFF (300 dpi). Step 8 caches the observed variable ranges in `variable_ranges_main.csv`;
-   remove this file whenever the model results are re-estimated.
+## 3. How to run
+
+Run the steps in the order of the table. Notes on individual steps:
+
+- **Step 1** is a plain Python script: `cd code && python step01_build_author_paper_table.py`.
+  The PKG tables are read in chunks of 2,000,000 rows; the final sort loads `Final_Result.tsv` into memory.
+- **Step 4** is a plain Python script: `cd code && python step04_select_unclassified_authors.py`.
+  The PKG author list is read in chunks of 500,000 rows.
+- **Step 5** runs the PKG × MEDLINE join in `N_BATCHES = 20` PMID slices with `memory_limit = '4GB'`, `threads = 2`
+  (≈ 12 min). On a larger machine raise the limits / lower `N_BATCHES` – the result is identical.
+- **Step 6** needs a local clone of Wiki-Gendersort; set `WG_DIR` in the first cell. A separate Python environment is recommended.
+- **Step 8** runtime ≈ 5–10 min, ≈ 8 GB RAM (DuckDB spills to disk). The topic × year table is kept in
+  `derived/dataprep.duckdb` (its CSV export is commented out).
+- **Step 9** needs a machine with a lot of memory (the main sample has 5.7 M authors; a full run takes several hours).
+  Specifications can be split over several sessions via `RUN_SPECS`; each writes its own folder `results/<spec>/`.
+- **Steps 10 and 11**: all figures are 10.7 cm wide, black-and-white (grey shades, line styles, hatching) and saved as
+  PDF and TIFF (300 dpi). Step 10 caches the observed variable ranges in `figures/models/variable_ranges_main.csv`;
+  remove this file whenever the model results are re-estimated.
 
 ### Software
 
 Python ≥ 3.10 with: `duckdb ≥ 1.0`, `pandas ≥ 2.0`, `numpy`, `scipy`, `lifelines ≥ 0.27`, `matplotlib ≥ 3.7` (+ Pillow for TIFF);
-Wiki-Gendersort (<https://github.com/nicolasberube/Wiki-Gendersort>) for step 4. See `requirements.txt`.
+Wiki-Gendersort (<https://github.com/nicolasberube/Wiki-Gendersort>) for step 6. See `requirements.txt`.
 
-## 3. Specifications estimated in step 7
+## 4. Specifications estimated in step 9
 
 Main sample: entry 1950–2018, authors active in ≥ 2 distinct years, dropout = no publication in the 2 years after the last
 one (observed by 2023). The other specifications are robustness checks.
@@ -69,10 +80,10 @@ Models: M0 (gender), M1 (+ entry-year strata), M2 (+ entry conditions), M3 (+ ge
 M4/M5 (restricted cubic splines, 4 knots at the 5/35/65/95th percentiles, without/with gender interactions).
 
 **Gender classification and career length:** before 2002 MEDLINE mostly stores initials, so the PKG classifies mainly authors
-whose careers extend beyond 2002. The name recovery closes most of this gap; classification still depends on career
-length before 2002, but the female share among classified authors does not (see `diag_classification_by_entry_year_span.csv`).
+whose careers extend beyond 2002. The name recovery (steps 4–7) closes most of this gap; classification still depends on
+career length before 2002, but the female share among classified authors does not (see `diag_classification_by_entry_year_span.csv`).
 
-## 4. Variable definitions (step 5)
+## 5. Variable definitions (step 8)
 
 | variable | definition |
 |---|---|
@@ -89,36 +100,35 @@ length before 2002, but the female share among classified authors does not (see 
 | `gender_source` | `pkg` = F/M already in PKG; `recovered` = F/M from recovered forename + Wiki-Gendersort |
 | `one_year` | 1 if all publications fall in one calendar year |
 
-Model coding (step 7): female share in 10-percentage-point units, log(1+topic size), maturity in years, first-year papers as
+Model coding (step 9): female share in 10-percentage-point units, log(1+topic size), maturity in years, first-year papers as
 dummies (2, 3+; ref. 1); all continuous variables centred at the sample median.
 
-## 5. Figures and tables
+## 6. Figures and tables
 
 | file | notebook | content |
 |---|---|---|
-| `fig_classification_artifact` | 8 | F/M classification rate and female share by entry year × career span |
-| `fig_gender_hr_models` | 8 | women/men HR across Models 0–5 (main) |
-| `fig_gender_hr_specs` | 8 | women/men HR across models and specifications |
-| `fig_gender_hr_cohorts` | 8 | women/men HR by entry period (main) |
-| `fig_M3_effects`, `tab_M3_effects_by_gender.csv` | 8 | effects of entry conditions for men and women (Model 3) |
-| `fig_linear_effects` | 8 | linear effects over the full observed range (Model 2 all; Model 3 men/women) |
-| `fig_splines` | 8 | spline effects over the full observed range (Model 4 all; Model 5 men/women) |
-| `fig_splines_gap`, `tab_gender_gap_splines.csv` | 8 | gender gap (women vs. men HR) along each entry condition (Model 5 vs. Model 3) |
-| `tab_main_models.tex/.csv`, `tab_sample_flow.tex/.csv` | 8 | model table (M0–M5, main), sample construction |
-| `fig_authors_gender_per_year`, `fig_female_share_entrants`, `fig_entry_distributions`, `fig_km_gender`, `fig_km_cohorts` | 8b | descriptives |
+| `fig_classification_artifact` | 10 | F/M classification rate and female share by entry year × career span |
+| `fig_gender_hr_models` | 10 | women/men HR across Models 0–5 (main) |
+| `fig_gender_hr_specs` | 10 | women/men HR across models and specifications |
+| `fig_gender_hr_cohorts` | 10 | women/men HR by entry period (main) |
+| `fig_M3_effects`, `tab_M3_effects_by_gender.csv` | 10 | effects of entry conditions for men and women (Model 3) |
+| `fig_linear_effects` | 10 | linear effects over the full observed range (Model 2 all; Model 3 men/women) |
+| `fig_splines` | 10 | spline effects over the full observed range (Model 4 all; Model 5 men/women) |
+| `fig_splines_gap`, `tab_gender_gap_splines.csv` | 10 | gender gap (women vs. men HR) along each entry condition (Model 5 vs. Model 3) |
+| `tab_main_models.tex/.csv`, `tab_sample_flow.tex/.csv` | 10 | model table (M0–M5, main), sample construction |
+| `fig_authors_gender_per_year`, `fig_female_share_entrants`, `fig_entry_distributions`, `fig_km_gender`, `fig_km_cohorts` | 11 | descriptives |
 
-## 6. Data
+## 7. Data
 
-| data | source | access |
+Place the input files in `data/raw/`:
+
+| file | source | access |
 |---|---|---|
-| PubMed Knowledge Graph 2.0 (author–paper table with AID and gender) | Xu et al., PKG 2.0 | public download (*add DOI/URL and table name*) |
-| Enhanced Author Names (MEDLINE) | Zhang et al. 2024 | public (*add DOI*) |
-| OpenAlex topics and topic → subfield/field/domain mapping | OpenAlex (Priem et al. 2022) | public snapshot (*add snapshot date*) |
-| Derived author-level file `cox_data_v3.csv` | this project | to be deposited (e.g. Zenodo/GESIS) – *decide* |
+| `C02_Link_Papers_Authors.tsv.gz` (author–paper links), `C07_Authors.tsv.gz` (authors), `A02_AuthorList.tsv` (author names) | PubMed Knowledge Graph 2.0 (Xu et al.) | public download (*add DOI/URL*) |
+| `cleaned_topics.csv` | OpenAlex works with PMID and primary topic (`pmid_numbers`, `topics_num`) | *add source / how it was produced* |
+| `AID_gender_korr.csv` | gender per PKG author ID (`AID`, `gender`) | *add source / how it was produced* |
+| `outside_topic_cites_new.csv` | share of citations from outside PubMed per topic | *add source / how it was computed* |
+| `MEDLINE-enhanced-author-names-v2.tsv` | Enhanced Author Names (Zhang et al. 2024) | public (*add DOI*) |
+| `openalex_topic_field_subfield_table.csv` | OpenAlex topic → subfield/field/domain mapping (Priem et al. 2022) | public snapshot (*add snapshot date*) |
 
-### Open documentation items (to complete before publication)
-
-- exact PKG 2.0 file used for `Final_Result.sorted.tsv`, and how `authors_gender_nan_ini.tsv` and `outside_topic_cites_new.csv` were produced;
-- OpenAlex snapshot date; Wiki-Gendersort version/commit;
-- archive (DOI) for derived data and code;
-- absolute paths in the notebooks (`/Users/arijorah/...`, server `/scratch/...`) and the working folder name `claude/` – replace by a neutral layout before deposit.
+The derived author-level file `cox_data.csv` is deposited at *add archive/DOI*.
